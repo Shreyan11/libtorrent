@@ -64,11 +64,12 @@ namespace libtorrent
 		};
 
 		explicit set_block_hash_result(result s) : status(s), first_verified_block(0), num_verified(0) {}
-		set_block_hash_result(int first_block, int num) : status(result::success), first_verified_block(first_block), num_verified(num) {}
+		set_block_hash_result(result st, int first_block, int num) : status(st), first_verified_block(first_block), num_verified(num) {}
 
+		static set_block_hash_result success(int first_block, int num) { return set_block_hash_result(result::success, first_block, num); }
 		static set_block_hash_result unknown() { return set_block_hash_result(result::unknown); }
 		static set_block_hash_result block_hash_failed() { return set_block_hash_result(result::block_hash_failed); }
-		static set_block_hash_result piece_hash_failed() { return set_block_hash_result(result::piece_hash_failed); }
+		static set_block_hash_result piece_hash_failed(int first_block, int num) { return set_block_hash_result(result::piece_hash_failed, first_block, num); }
 
 		result status;
 		// if status is success, this will hold the index of the first verified

@@ -1131,6 +1131,22 @@ bool is_downloading_state(int const st)
 		pause();
 	}
 
+	void torrent::handle_inconsistent_hashes(piece_index_t const piece)
+	{
+		auto const file_slices = torrent_file().map_block(piece, 0, 0);
+		file_index_t const file = file_slices.empty() ? torrent_status::error_file_none : file_slices[0].file_index;
+		set_error(errors::torrent_inconsistent_hashes, file);
+		// if this is a hybrid torrent, we may have marked some more pieces
+		// as "have" but not yet validated them against the v2 hashes. At
+		// this point, just assume we have no pieces
+		m_picker.reset();
+		m_hash_picker.reset();
+		m_file_progress.clear();
+		m_have_all = false;
+		update_gauge();
+		pause();
+	}
+
 	void torrent::on_piece_fail_sync(piece_index_t const piece, piece_block) try
 	{
 		if (m_abort) return;
@@ -2520,8 +2536,7 @@ bool is_downloading_state(int const st)
 
 		if ((hash_passed[0] && !hash_passed[1]) || (!hash_passed[0] && hash_passed[1]))
 		{
-			set_error(errors::torrent_inconsistent_hashes, torrent_status::error_file_none);
-			pause();
+			handle_inconsistent_hashes(piece);
 			return;
 		}
 		else if (hash_passed[0] || hash_passed[1])
@@ -3999,8 +4014,7 @@ namespace {
 
 		if (!error && ((passed && !v2_passed) || (!passed && v2_passed)))
 		{
-			set_error(errors::torrent_inconsistent_hashes, torrent_status::error_file_none);
-			pause();
+			handle_inconsistent_hashes(piece);
 			return;
 		}
 
@@ -4230,16 +4244,16 @@ namespace {
 				, i * default_block_size, block_hashes[i]);
 			last_result = result;
 
+			// all verified ranges should always be full pieces or less
+			TORRENT_ASSERT(result.first_verified_block >= 0
+				|| (result.first_verified_block % blocks_per_piece) == 0);
+			TORRENT_ASSERT(result.num_verified <= blocks_per_piece
+				|| (result.num_verified % blocks_per_piece) == 0);
+
 			if (result.status == set_block_hash_result::result::success)
 			{
 				TORRENT_ASSERT(result.first_verified_block < blocks_in_piece);
 				TORRENT_ASSERT(blocks_in_piece <= blocks_per_piece);
-
-				// all verified ranges should always be full pieces or less
-				TORRENT_ASSERT(result.first_verified_block >= 0
-					|| (result.first_verified_block % blocks_per_piece) == 0);
-				TORRENT_ASSERT(result.num_verified <= blocks_per_piece
-					|| (result.num_verified % blocks_per_piece) == 0);
 
 				// note that result.num_verified may cover pad blocks too, and
 				// so may be > blocks_in_piece
@@ -4294,6 +4308,23 @@ namespace {
 			// it actually failed. Otherwise it might have been failing
 			// because of other, previously existing block hashes.
 			ret = false;
+
+			// if the hashes for more than one piece have been verified,
+			// check for any pieces which were already checked but couldn't
+			// be verified and mark them as verified
+			using delta = piece_index_t::diff_type;
+			for (piece_index_t verified_piece = piece + delta(last_result.first_verified_block / blocks_per_piece)
+				, end = verified_piece + delta(last_result.num_verified / blocks_per_piece)
+				; verified_piece < end; ++verified_piece)
+			{
+				if (!has_picker()
+					|| verified_piece == piece)
+					continue;
+
+				m_picker->we_dont_have(verified_piece);
+				update_gauge();
+				piece_failed(verified_piece);
+			}
 		}
 
 		if (boost::indeterminate(ret) && std::all_of(block_passed.begin(), block_passed.end()
@@ -6777,8 +6808,7 @@ namespace {
 		{
 			if (torrent_file().info_hashes().has_v1() && have_piece(p.first))
 			{
-				set_error(errors::torrent_inconsistent_hashes, torrent_status::error_file_none);
-				pause();
+				handle_inconsistent_hashes(p.first);
 				return result.valid;
 			}
 
@@ -6793,8 +6823,7 @@ namespace {
 		{
 			if (torrent_file().info_hashes().has_v1() && !have_piece(p))
 			{
-				set_error(errors::torrent_inconsistent_hashes, torrent_status::error_file_none);
-				pause();
+				handle_inconsistent_hashes(p);
 				return result.valid;
 			}
 
