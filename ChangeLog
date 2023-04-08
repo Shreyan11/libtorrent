@@ -1,3 +1,5 @@
+	* add stricter checking of piece layers when loading torrents
+	* add stricter checking of v1 and v2 hashes being consistent
 	* fix issue with read_piece() stopping torrent on pieces not yet downloaded
 	* improve handling of allow_i2p_mixed setting to work for magnet links
 	* fix web seed request for renamed single-file torrents
