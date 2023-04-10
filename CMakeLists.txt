@@ -238,6 +238,7 @@ set(libtorrent_aux_include_files
 	ip_notifier.hpp
 	keepalive.hpp
 	listen_socket_handle.hpp
+	load_torrent.hpp
 	lsd.hpp
 	merkle.hpp
 	noexcept_movable.hpp
@@ -326,6 +327,7 @@ set(sources
 	ip_voter.cpp
 	lazy_bdecode.cpp
 	listen_socket_handle.cpp
+	load_torrent.cpp
 	lsd.cpp
 	magnet_uri.cpp
 	merkle.cpp
